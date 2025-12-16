@@ -1,0 +1,194 @@
++-----------------------------------------------------+
+|             Little-Endian Memory Layout             |
++--------+--------+--------+--------+--------+--------+
+| 0x1000 | 0x1001 | 0x1002 | 0x1003 | 0x1004 | 0x1005 |
++--------+--------+--------+--------+--------+--------+
+|  0x80  |  0x3e  |  0x00  |  0x00  |  0x01  |  0x00  | <-- 0x100003e80 (0x0000000100003e80)
++--------+--------+--------+--------+--------+--------+
+    |                                            |
+    v                                            v
+least significant byte                  most significant byte
+
+
+bl main
+
+PROLOGUE BEGIN
+sub sp, sp, #0x30
+
+0x16f13f070 --> +----------------+ <-- SP (alignment 16B)
+                |    48 bytes    |     extended from caller's SP
+                |  reserved for  |
+                | main()'s frame |
+0x16f13f0a0 --> +----------------+ <-- SP (caller's)
+                | caller's frame | 
+0x16f13f2d0 --> +----------------+ <-- X29 (caller's)
+
+stp x29, x30, [sp, #0x20]
+
+0x16f13f070 --> +----------------+ <-- SP
+                |    32 bytes    | <-- yet occupied by
+                |  reserved for  |     rubbish values
+                | main()'s frame |
+                +----------------+
+0x16f13f090 --> |  0x16f13f2d0   | <-- caller's X29 [SP+0x20]
+                +----------------+
+0x16f13f098 --> |  0x19617c274   | <-- X30 [SP+0x28]
+0x16f13f0a0 --> +----------------+ <-- SP (caller's)
+                | caller's frame |
+0x16f13f2d0 --> +----------------+ <-- X29 (caller's)
+
+add x29, sp, #0x20
+
+0x16f13f070 --> +----------------+ <-- SP
+                |    32 bytes    |
+                |  reserved for  |
+                | main()'s frame |
+                +----------------+
+0x16f13f090 --> |  0x16f13f2d0   | <-- X29 [X29+0x0]
+                +----------------+
+0x16f13f098 --> |  0x19617c274   | <-- X30 [X29+0x8]
+0x16f13f0a0 --> +----------------+ <-- SP (caller's)
+                | caller's frame | 
+0x16f13f2d0 --> +----------------+ <-- X29 (caller's)
+PROLOGUE END
+
+stur wzr, [x29, #-4]
+stur w0, [x29, #-8]
+str x1, [sp, #0x10]
+
+0x16f13f070 --> +----------------+ <-- SP
+                |    16 bytes    |
+                |  reserved for  |
+                | main()'s frame |
+                +----------------+
+0x16f13f080 --> |  0x16f8a32f8   | <-- argv array ptr [SP+0x10]
+                +----------------+
+0x16f13f088 --> |   0x00000001   | <-- argc [X29-0x8]
+                +----------------+
+0x16f13f08c --> |   0x00000000   | <-- raw (zero) ret val [X29-0x4]
+                +----------------+
+0x16f13f090 --> |  0x16f13f2d0   | <-- X29 [X29+0x0]
+                +----------------+
+0x16f13f098 --> |  0x19617c274   | <-- X30 [X29+0x8]
+0x16f13f0a0 --> +----------------+ <-- SP (caller's)
+                | caller's frame | 
+0x16f13f2d0 --> +----------------+ <-- X29 (caller's)
+
+mov x9, sp
+adrp x8, _mh_execute_header+12288 <-- global header
+add x8, x8, #0xe80                <-- padding to secret()
+str x8, [x9]
+note: emit ADRL to get mh?
+
+0x16f13f070 --> +----------------+ <-- SP
+                |  0x10055fe80   | <-- addr of secret() [SP+0x0]
+                +----------------+
+                |    8 bytes     |
+                |  reserved for  |
+                | main()'s frame |
+                +----------------+
+0x16f13f080 --> |  0x16f13f2f8   | <-- argv array ptr [SP+0x10]
+                +----------------+
+0x16f13f088 --> |   0x00000001   | <-- argc [X29-0x8]
+                +----------------+
+0x16f13f08c --> |   0x00000000   | <-- raw (zero) ret val [X29-0x4]
+                +----------------+
+0x16f13f090 --> |  0x16f13f2d0   | <-- X29 [X29+0x0]
+                +----------------+
+0x16f13f098 --> |  0x19617c274   | <-- X30 [X29+0x8]
+0x16f13f0a0 --> +----------------+ <-- SP (caller's)
+                | caller's frame | 
+0x16f13f2d0 --> +----------------+ <-- X29 (caller's)
+
+adrp x0, _mh_execute_header+12288   
+add x0, x0, #0xf79 
+bl printf
+adrp x0, _mh_execute_header+12288
+add x0, x0, #0xf93
+bl printf
+
+bl vuln
+(vuln returns and stores 1 to x0 upon successful execution)
+str w0, [sp, #0xc]
+
+0x16f13f070 --> +----------------+ <-- SP
+                |  0x10055fe80   | <-- addr of secret() [SP+0x0]
+                +----------------+
+0x16f13f07c --> |   0x00000001   | <-- vuln's ret val [SP+0xc]
+                +----------------+
+                |    4 bytes     |
+                |  reserved for  | <-- unused
+                | main()'s frame |
+                +----------------+
+0x16f13f080 --> |  0x16f13f2f8   | <-- argv array ptr [SP+0x10]
+                +----------------+
+0x16f13f088 --> |   0x00000001   | <-- argc [X29-0x8]
+                +----------------+
+0x16f13f08c --> |   0x00000000   | <-- raw (zero) ret val [X29-0x4]
+                +----------------+
+0x16f13f090 --> |  0x16f13f2d0   | <-- X29 [X29+0x0]
+                +----------------+
+0x16f13f098 --> |  0x19617c274   | <-- X30 [X29+0x8]
+0x16f13f0a0 --> +----------------+ <-- SP (caller's)
+                | caller's frame | 
+0x16f13f2d0 --> +----------------+ <-- X29 (caller's)
+
+ldr w0, [sp, #0xc]
+EPILOGUE BEGIN
+ldp x29, x30, [sp, #0x20]
+note: also restores x30 since it was tampered by other calls
+
+0x16f13f070 --> +----------------+ <-- SP
+                |  0x10055fe80   | <-- addr of secret() [SP+0x0]
+                +----------------+
+0x16f13f07c --> |   0x00000001   | <-- vuln's ret val [SP+0xc]
+                +----------------+
+                |    4 bytes     |
+                |  reserved for  | <-- unused
+                | main()'s frame |
+                +----------------+
+0x16f13f080 --> |  0x16f13f2f8   | <-- argv array ptr [SP+0x10]
+                +----------------+
+0x16f13f088 --> |   0x00000001   | <-- argc [SP+0x18]
+                +----------------+
+0x16f13f08c --> |   0x00000000   | <-- raw (zero) ret val [SP+0x1c]
+                +----------------+
+0x16f13f090 --> |  0x16f13f2d0   | <-- caller's X29 [SP+0x20]
+                +----------------+
+0x16f13f098 --> |  0x19617c274   | <-- X30 [SP+0x28]
+0x16f13f0a0 --> +----------------+ <-- caller's SP
+                | caller's frame | 
+0x16f13f2d0 --> +----------------+ <-- X29 (restored)
+
+add sp, sp, #0x30
+
+0x16f13f070 --> +----------------+ 
+                |  0x10055fe80   | <-- addr of secret()
+                +----------------+
+0x16f13f07c --> |   0x00000001   | <-- vuln's ret val
+                +----------------+
+                |    4 bytes     |
+                |  reserved for  | <-- unused
+                | main()'s frame |
+                +----------------+
+0x16f13f080 --> |  0x16f13f2f8   | <-- argv array ptr
+                +----------------+
+0x16f13f088 --> |   0x00000001   | <-- argc
+                +----------------+
+0x16f13f08c --> |   0x00000000   | <-- raw (zero) ret val
+                +----------------+
+0x16f13f090 --> |  0x16f13f2d0   | <-- caller's X29
+                +----------------+
+0x16f13f098 --> |  0x19617c274   | <-- X30
+                +----------------+
+                    rubbish -
+                  no longer used
+                        ^
+                        |
+0x16f13f0a0 --> +----------------+ <-- SP (restored)
+                | caller's frame | 
+0x16f13f2d0 --> +----------------+ <-- X29 (restored)
+
+EPILOGUE END
+ret
+note: PC overwritten by X30 so come back to a point in start()
